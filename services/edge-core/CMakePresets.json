@@ -1,0 +1,188 @@
+{
+  "$schema": "https://cmake.org/cmake/help/latest/manual/cmake-presets.7.html",
+  "version": 9,
+  "cmakeMinimumRequired": {
+    "major": 3,
+    "minor": 25,
+    "patch": 0
+  },
+
+  "configurePresets": [
+    {
+      "name": "base",
+      "hidden": true,
+      "description": "Common base — sets source/build dirs and vcpkg toolchain.",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/${presetName}",
+      "cacheVariables": {
+        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON"
+      },
+      "environment": {
+        "VCPKG_ROOT": "$env{VCPKG_ROOT}"
+      }
+    },
+
+    {
+      "name": "linux-debug-sanitize",
+      "displayName": "Linux — Debug + ASan + UBSan",
+      "description": "Development build with AddressSanitizer and UBSan enabled.",
+      "inherits": "base",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE":   "Debug",
+        "CTM_ENABLE_ASAN":    "ON",
+        "CTM_ENABLE_UBSAN":   "ON",
+        "CTM_ENABLE_TSAN":    "OFF",
+        "CTM_ENABLE_LSAN":    "OFF"
+      },
+      "environment": {
+        "ASAN_OPTIONS":  "detect_leaks=1:halt_on_error=1:abort_on_error=1:print_stats=1",
+        "UBSAN_OPTIONS": "halt_on_error=1:print_stacktrace=1"
+      },
+      "condition": {
+        "type": "notEquals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Windows"
+      }
+    },
+
+    {
+      "name": "linux-tsan",
+      "displayName": "Linux — Debug + ThreadSanitizer",
+      "description": "Data race detection. Cannot combine with ASan.",
+      "inherits": "base",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "CTM_ENABLE_TSAN":  "ON",
+        "CTM_ENABLE_ASAN":  "OFF",
+        "CTM_ENABLE_UBSAN": "OFF"
+      },
+      "environment": {
+        "TSAN_OPTIONS": "halt_on_error=1:second_deadlock_stack=1:report_atomic_races=1"
+      },
+      "condition": {
+        "type": "notEquals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Windows"
+      }
+    },
+
+    {
+      "name": "linux-lsan",
+      "displayName": "Linux — Debug + LeakSanitizer",
+      "description": "Standalone leak detection without full ASan overhead.",
+      "inherits": "base",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "CTM_ENABLE_LSAN":  "ON",
+        "CTM_ENABLE_ASAN":  "OFF",
+        "CTM_ENABLE_UBSAN": "OFF"
+      },
+      "condition": {
+        "type": "notEquals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Windows"
+      }
+    },
+
+    {
+      "name": "linux-release",
+      "displayName": "Linux — Release (O3 + LTO)",
+      "description": "Production build: full optimizations, no sanitizers, stripped binary.",
+      "inherits": "base",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE":   "Release",
+        "CTM_ENABLE_ASAN":    "OFF",
+        "CTM_ENABLE_UBSAN":   "OFF",
+        "CTM_ENABLE_TSAN":    "OFF",
+        "CTM_ENABLE_LSAN":    "OFF"
+      }
+    },
+
+    {
+      "name": "docker-release",
+      "displayName": "Docker — Release (Ubuntu 24.04)",
+      "description": "Used inside the Docker builder stage. Installs to /usr/local.",
+      "inherits": "linux-release",
+      "cacheVariables": {
+        "CMAKE_INSTALL_PREFIX": "/usr/local",
+        "CMAKE_BUILD_TYPE":     "Release"
+      }
+    },
+
+    {
+      "name": "windows-debug",
+      "displayName": "Windows — Debug (MSVC)",
+      "description": "Windows debug build via MSVC with ASan.",
+      "inherits": "base",
+      "generator": "Visual Studio 17 2022",
+      "architecture": {
+        "value": "x64",
+        "strategy": "set"
+      },
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "CTM_ENABLE_ASAN":  "ON"
+      },
+      "condition": {
+        "type": "equals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Windows"
+      }
+    },
+
+    {
+      "name": "windows-release",
+      "displayName": "Windows — Release (MSVC)",
+      "inherits": "base",
+      "generator": "Visual Studio 17 2022",
+      "architecture": {
+        "value": "x64",
+        "strategy": "set"
+      },
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "CTM_ENABLE_ASAN":  "OFF"
+      },
+      "condition": {
+        "type": "equals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Windows"
+      }
+    }
+  ],
+
+  "buildPresets": [
+    {
+      "name": "linux-debug-sanitize",
+      "configurePreset": "linux-debug-sanitize",
+      "jobs": 0
+    },
+    {
+      "name": "linux-tsan",
+      "configurePreset": "linux-tsan",
+      "jobs": 0
+    },
+    {
+      "name": "linux-release",
+      "configurePreset": "linux-release",
+      "jobs": 0,
+      "targets": ["edge-core"]
+    },
+    {
+      "name": "docker-release",
+      "configurePreset": "docker-release",
+      "jobs": 0,
+      "targets": ["install"]
+    },
+    {
+      "name": "windows-debug",
+      "configurePreset": "windows-debug",
+      "configuration": "Debug"
+    },
+    {
+      "name": "windows-release",
+      "configurePreset": "windows-release",
+      "configuration": "Release"
+    }
+  ]
+}

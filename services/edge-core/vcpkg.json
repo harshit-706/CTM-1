@@ -1,0 +1,40 @@
+{
+  "name": "ctm-edge-core",
+  "version": "1.0.0",
+  "description": "CTM-1 Edge Core — Industrial IoT Edge Service",
+  "dependencies": [
+    {
+      "name": "drogon",
+      "version>=": "1.9.0"
+    },
+    {
+      "name": "jsoncpp",
+      "version>=": "1.9.5"
+    },
+    {
+      "name": "sqlite3",
+      "version>=": "3.43.0"
+    },
+    {
+      "name": "libmodbus",
+      "version>=": "3.1.6"
+    }
+  ],
+  "features": {
+    "testing": {
+      "description": "Unit test dependencies",
+      "dependencies": [
+        {
+          "name": "catch2",
+          "version>=": "3.4.0"
+        }
+      ]
+    }
+  },
+  "overrides": [
+    {
+      "name": "openssl",
+      "version": "3.1.4"
+    }
+  ]
+}

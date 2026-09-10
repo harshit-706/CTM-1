@@ -1,6 +1,7 @@
 <script lang="ts">
   import { goto } from '$app/navigation';
-  import { aiGeneratedTopology } from '$lib/store';
+  import { aiGeneratedTopology, liveTelemetry } from '$lib/store';
+  import { get } from 'svelte/store';
 
   // Svelte 5 runes – MUST use $state for reactivity
   let isOpen = $state(false);
@@ -19,7 +20,7 @@
     {
       id: 'welcome-1',
       sender: 'ai',
-      text: "👋 **Hello Operator!** I am your **Astra AI Assistant** fused into Product X.\n\nDescribe your plant setup or click **🎨 Generate Plant Topology** to auto-generate a full interactive layout on the Topology Designer canvas!",
+      text: "**CTM1 online.** Live asset telemetry fused.\n\nAsk a diagnostic question, request an energy report, or say **\"Build water treatment topology\"** to generate a plant layout.",
       time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
     }
   ]);
@@ -48,12 +49,16 @@
     messages = [...messages, { id: 'msg-' + Date.now(), sender: 'user', text: textToSend, time: userTime }];
     if (!customPrompt) query = '';
 
+    // Attach live telemetry snapshot for context-aware AI responses
+    const telemSnapshot = get(liveTelemetry);
+    const telemetryPayload = Object.keys(telemSnapshot).length > 0 ? telemSnapshot : null;
+
     isLoading = true;
     try {
       const res = await fetch('/api/ai-insights', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ prompt: textToSend })
+        body: JSON.stringify({ prompt: textToSend, telemetry: telemetryPayload })
       });
       const data = await res.json();
       const aiTime = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
@@ -68,10 +73,10 @@
         }];
         if (topo) applyTopology(topo);
       } else {
-        messages = [...messages, { id: 'msg-' + Date.now(), sender: 'ai', text: "❌ Error: " + (data.error || "Unknown"), time: aiTime }];
+        messages = [...messages, { id: 'msg-' + Date.now(), sender: 'ai', text: "❌ " + (data.error || "Error"), time: aiTime }];
       }
     } catch (err: any) {
-      messages = [...messages, { id: 'msg-' + Date.now(), sender: 'ai', text: "⚠️ Network error: " + err.message, time: new Date().toLocaleTimeString() }];
+      messages = [...messages, { id: 'msg-' + Date.now(), sender: 'ai', text: "⚠️ " + err.message, time: new Date().toLocaleTimeString() }];
     } finally {
       isLoading = false;
     }
@@ -128,8 +133,8 @@
           <span style="position:absolute;inset:0;border-radius:50%;background:#6ee7b7;opacity:0.75;animation:ping 1.5s ease-in-out infinite;"></span>
           <span style="position:relative;width:10px;height:10px;border-radius:50%;background:#34d399;display:block;"></span>
         </span>
-        Astra AI Copilot
-        <span style="background:rgba(4,47,46,0.8);color:#6ee7b7;font-size:9px;padding:2px 7px;border-radius:999px;letter-spacing:0.08em;font-family:monospace;text-transform:uppercase;">FUSED</span>
+        CTM1 AI
+        <span style="background:rgba(4,47,46,0.8);color:#6ee7b7;font-size:9px;padding:2px 7px;border-radius:999px;letter-spacing:0.08em;font-family:monospace;text-transform:uppercase;">LIVE</span>
       </button>
     </div>
   {/if}
@@ -154,10 +159,10 @@
           </div>
           <div>
             <div style="color:white;font-weight:700;font-size:15px;display:flex;align-items:center;gap:8px;">
-              Astra AI Assistant
+              CTM1 AI
               <span style="background:rgba(16,185,129,0.2);color:#34d399;border:1px solid rgba(16,185,129,0.3);font-size:9px;padding:2px 6px;border-radius:4px;font-family:monospace;">Grok-2</span>
             </div>
-            <div style="color:#64748b;font-size:11px;font-family:monospace;margin-top:2px;">Key: xpl_277689... fused</div>
+            <div style="color:#64748b;font-size:11px;font-family:monospace;margin-top:2px;">Live telemetry fused · ctm1-edge</div>
           </div>
         </div>
         <button
@@ -175,19 +180,25 @@
           style="background:rgba(5,46,22,0.8);color:#34d399;border:1px solid rgba(16,185,129,0.5);padding:6px 12px;border-radius:999px;white-space:nowrap;font-size:11px;font-weight:600;cursor:pointer;transition:all 0.15s;font-family:'Space Grotesk',sans-serif;"
           onmouseenter={(e) => { (e.currentTarget as HTMLElement).style.background = 'rgba(16,185,129,0.25)'; }}
           onmouseleave={(e) => { (e.currentTarget as HTMLElement).style.background = 'rgba(5,46,22,0.8)'; }}
-        >🎨 Generate Plant Topology</button>
+        >🎨 Build Topology</button>
         <button
-          onclick={() => sendPrompt("Diagnose vibration spike on Pump P-101")}
+          onclick={() => sendPrompt("Diagnose P-104 vibration and bearing health")}
           style="background:rgba(255,255,255,0.04);color:#94a3b8;border:1px solid rgba(255,255,255,0.1);padding:6px 12px;border-radius:999px;white-space:nowrap;font-size:11px;cursor:pointer;transition:all 0.15s;font-family:'Space Grotesk',sans-serif;"
           onmouseenter={(e) => { (e.currentTarget as HTMLElement).style.background = 'rgba(255,255,255,0.08)'; }}
           onmouseleave={(e) => { (e.currentTarget as HTMLElement).style.background = 'rgba(255,255,255,0.04)'; }}
-        >🩺 Pump P-101</button>
+        >🩺 Diagnose P-104</button>
         <button
-          onclick={() => sendPrompt("Give energy optimization recommendations for active plant motors")}
+          onclick={() => sendPrompt("Energy efficiency report for active plant assets")}
           style="background:rgba(255,255,255,0.04);color:#94a3b8;border:1px solid rgba(255,255,255,0.1);padding:6px 12px;border-radius:999px;white-space:nowrap;font-size:11px;cursor:pointer;transition:all 0.15s;font-family:'Space Grotesk',sans-serif;"
           onmouseenter={(e) => { (e.currentTarget as HTMLElement).style.background = 'rgba(255,255,255,0.08)'; }}
           onmouseleave={(e) => { (e.currentTarget as HTMLElement).style.background = 'rgba(255,255,255,0.04)'; }}
-        >⚡ Energy Opt.</button>
+        >⚡ Energy Report</button>
+        <button
+          onclick={() => sendPrompt("Plant status summary with all active asset telemetry")}
+          style="background:rgba(255,255,255,0.04);color:#94a3b8;border:1px solid rgba(255,255,255,0.1);padding:6px 12px;border-radius:999px;white-space:nowrap;font-size:11px;cursor:pointer;transition:all 0.15s;font-family:'Space Grotesk',sans-serif;"
+          onmouseenter={(e) => { (e.currentTarget as HTMLElement).style.background = 'rgba(255,255,255,0.08)'; }}
+          onmouseleave={(e) => { (e.currentTarget as HTMLElement).style.background = 'rgba(255,255,255,0.04)'; }}
+        >📊 Plant Status</button>
       </div>
 
       <!-- Messages -->
@@ -227,7 +238,7 @@
         {#if isLoading}
           <div style="display:flex;align-items:center;gap:8px;background:rgba(15,23,42,0.9);border:1px solid rgba(255,255,255,0.06);border-radius:16px;border-bottom-left-radius:4px;padding:12px 14px;width:fit-content;">
             <span style="width:8px;height:8px;border-radius:50%;background:#34d399;animation:ping 1s ease-in-out infinite;display:block;"></span>
-            <span style="font-size:12px;color:#34d399;">Astra AI generating...</span>
+            <span style="font-size:12px;color:#34d399;">CTM1 analyzing...</span>
           </div>
         {/if}
       </div>
@@ -251,8 +262,8 @@
           >➔</button>
         </div>
         <div style="margin-top:6px;font-size:10px;color:#334155;display:flex;justify-content:space-between;padding:0 2px;">
-          <span>Powered by Astra / Grok LLM</span>
-          <span style="color:rgba(52,211,153,0.6);font-family:monospace;">Workspace Fused</span>
+          <span>CTM1 · Grok-2 · Live Telemetry</span>
+          <span style="color:rgba(52,211,153,0.6);font-family:monospace;">Edge Fused</span>
         </div>
       </div>
     </div>

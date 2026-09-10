@@ -7,13 +7,38 @@ build/
 !.env.example
 *.db
 *.sqlite
+
+# CMake artifacts
 CMakeCache.txt
 CMakeFiles/
 cmake_install.cmake
 Makefile
 compile_commands.json
+CMakeUserPresets.json
+
+# CMake preset build dirs
+services/edge-core/build/
+services/*/build/
+
+# vcpkg manifest installs
+vcpkg_installed/
+
+# Sanitizer / profiling output
+*.asan
+*.ubsan
+*.tsan
+*.profraw
+*.profdata
+
+# Python
 __pycache__/
 *.pyc
 *.pyo
 venv/
 .venv/
+
+# Editor
+*.swp
+*.swo
+*~
+.DS_Store

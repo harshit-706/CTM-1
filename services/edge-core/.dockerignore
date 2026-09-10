@@ -1,0 +1,55 @@
+# CTM-1 Edge Core — Docker ignore file
+# Excludes files that should NOT be sent to the Docker build context.
+# Keeps the build context small and fast.
+
+# ── Build artifacts ──────────────────────────────────────────────────────────
+build/
+build-*/
+*.o
+*.a
+*.so
+*.dll
+*.pdb
+*.exe
+
+# ── vcpkg build cache (large, not needed — Docker re-installs inside builder) ─
+vcpkg_installed/
+buildtrees/
+
+# ── Git & CI ──────────────────────────────────────────────────────────────────
+.git/
+.github/
+.gitignore
+.gitattributes
+
+# ── IDE / Editor ──────────────────────────────────────────────────────────────
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# ── Tests (not compiled in Docker release build) ──────────────────────────────
+tests/
+test/
+
+# ── Docs ──────────────────────────────────────────────────────────────────────
+docs/
+*.md
+
+# ── Secrets & env ─────────────────────────────────────────────────────────────
+.env
+.env.*
+*.pem
+*.key
+*.crt
+
+# ── SQLite DB (mounted as volume at runtime) ──────────────────────────────────
+*.db
+*.sqlite
+
+# ── CMake preset user overrides ───────────────────────────────────────────────
+CMakeUserPresets.json
+
+# ── compile_commands.json (large, IDE-only) ───────────────────────────────────
+compile_commands.json
