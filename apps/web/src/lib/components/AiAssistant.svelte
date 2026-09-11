@@ -2,6 +2,7 @@
   import { goto } from '$app/navigation';
   import { aiGeneratedTopology, liveTelemetry } from '$lib/store';
   import { get } from 'svelte/store';
+  import DynamicCanvas from './DynamicCanvas.svelte';
 
   // Svelte 5 runes – MUST use $state for reactivity
   let isOpen = $state(false);
@@ -13,6 +14,8 @@
     sender: 'user' | 'ai';
     text: string;
     topologyData?: { nodes: any[], edges: any[] } | null;
+    hmiData?: any;
+    contextVersion?: number;
     time: string;
   }
 
@@ -69,6 +72,8 @@
           sender: 'ai',
           text: data.content,
           topologyData: topo,
+          hmiData: data.hmi_json,
+          contextVersion: data.context_version,
           time: aiTime
         }];
         if (topo) applyTopology(topo);
@@ -226,6 +231,12 @@
                       onmouseleave={(e) => { (e.currentTarget as HTMLElement).style.opacity = '1'; }}
                     >Apply Topology to Canvas ➔</button>
                   </div>
+                {/if}
+                {#if msg.hmiData}
+                  <DynamicCanvas data={msg.hmiData} />
+                  {#if msg.contextVersion !== undefined}
+                    <div style="margin-top:4px;font-size:9px;color:#475569;text-align:right;font-family:monospace;">ctx_rev: {msg.contextVersion}</div>
+                  {/if}
                 {/if}
               {:else}
                 {msg.text}

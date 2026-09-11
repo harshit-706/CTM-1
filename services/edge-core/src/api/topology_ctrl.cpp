@@ -23,22 +23,23 @@ void TopologyCtrl::publishTopology(const drogon::HttpRequestPtr& req,
 
     // 1. Server-side Validation
     std::map<std::string, std::vector<std::string>> allowedConnections = {
-        {"plc", {"vfd", "soft_starter", "remote_io", "scada", "edge_gateway"}},
-        {"pac", {"vfd", "soft_starter", "remote_io", "scada", "edge_gateway"}},
-        {"remote_io", {"vfd", "soft_starter", "sensor"}},
+        {"plc", {"vfd", "soft_starter", "remote_io", "scada", "edge_gateway", "hmi", "temp_sensor", "pressure_sensor", "flow_sensor", "vibration_sensor"}},
+        {"pac", {"vfd", "soft_starter", "remote_io", "scada", "edge_gateway", "hmi", "temp_sensor", "pressure_sensor", "flow_sensor", "vibration_sensor"}},
+        {"remote_io", {"vfd", "soft_starter", "temp_sensor", "pressure_sensor", "flow_sensor", "vibration_sensor"}},
         {"breaker", {"vfd", "soft_starter", "energy_meter", "motor"}},
-        {"vfd", {"motor"}},
-        {"soft_starter", {"motor"}},
+        {"vfd", {"motor", "pump", "compressor", "fan"}},
+        {"soft_starter", {"motor", "pump", "compressor", "fan"}},
         {"motor", {"pump", "compressor", "fan", "vibration_sensor", "temp_sensor"}},
         {"pump", {"pressure_sensor", "flow_sensor", "vibration_sensor"}},
         {"compressor", {"pressure_sensor", "temp_sensor", "vibration_sensor"}},
         {"fan", {"vibration_sensor"}},
-        {"temp_sensor", {"plc", "pac", "remote_io", "edge_gateway"}},
-        {"pressure_sensor", {"plc", "pac", "remote_io", "edge_gateway"}},
-        {"flow_sensor", {"plc", "pac", "remote_io", "edge_gateway"}},
-        {"vibration_sensor", {"plc", "pac", "remote_io", "edge_gateway"}},
-        {"energy_meter", {"plc", "pac", "edge_gateway"}},
-        {"edge_gateway", {"scada", "hmi"}}
+        {"temp_sensor", {"plc", "pac", "remote_io", "edge_gateway", "motor", "compressor"}},
+        {"pressure_sensor", {"plc", "pac", "remote_io", "edge_gateway", "pump", "compressor"}},
+        {"flow_sensor", {"plc", "pac", "remote_io", "edge_gateway", "pump"}},
+        {"vibration_sensor", {"plc", "pac", "remote_io", "edge_gateway", "motor", "pump", "compressor", "fan"}},
+        {"energy_meter", {"plc", "pac", "edge_gateway", "breaker"}},
+        {"edge_gateway", {"scada", "hmi", "plc", "pac"}},
+        {"hmi", {"plc", "pac", "edge_gateway"}}
     };
 
     const auto& nodes = (*jsonBody)["nodes"];
@@ -94,6 +95,7 @@ void TopologyCtrl::publishTopology(const drogon::HttpRequestPtr& req,
     }
     
     db.logAuditEvent("TOPOLOGY_PUBLISH", "SYSTEM", "Published " + std::to_string(nodes.size()) + " assets");
+    ctm::ingestion::LiveStateStore::getInstance().incrementContextVersion();
 
     // 3. Forward to Python Simulator
     auto client = drogon::HttpClient::newHttpClient("http://127.0.0.1:8082");
@@ -120,7 +122,7 @@ void TopologyCtrl::publishTopology(const drogon::HttpRequestPtr& req,
     });
 }
 
-void TopologyCtrl::listAssets(const drogon::HttpRequestPtr& req,
+void TopologyCtrl::listAssets(const drogon::HttpRequestPtr& /*req*/,
                               std::function<void(const drogon::HttpResponsePtr&)>&& callback) {
     auto& db = ctm::storage::SQLiteRepository::getInstance();
     auto& store = ctm::ingestion::LiveStateStore::getInstance();

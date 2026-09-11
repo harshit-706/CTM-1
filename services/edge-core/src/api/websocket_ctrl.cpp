@@ -8,7 +8,7 @@ std::mutex WebSocketCtrl::connections_mutex_;
 std::unordered_set<drogon::WebSocketConnectionPtr> WebSocketCtrl::connections_;
 
 void WebSocketCtrl::handleNewMessage(const drogon::WebSocketConnectionPtr& wsConnPtr,
-                                     std::string&& message,
+                                     std::string&& /*message*/,
                                      const drogon::WebSocketMessageType& type) {
     // We primarily push data to the client, but handle ping/pong if needed
     if (type == drogon::WebSocketMessageType::Ping) {
@@ -16,7 +16,7 @@ void WebSocketCtrl::handleNewMessage(const drogon::WebSocketConnectionPtr& wsCon
     }
 }
 
-void WebSocketCtrl::handleNewConnection(const drogon::HttpRequestPtr& req,
+void WebSocketCtrl::handleNewConnection(const drogon::HttpRequestPtr& /*req*/,
                                         const drogon::WebSocketConnectionPtr& wsConnPtr) {
     std::lock_guard<std::mutex> lock(connections_mutex_);
     connections_.insert(wsConnPtr);

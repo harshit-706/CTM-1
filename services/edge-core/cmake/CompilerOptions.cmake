@@ -101,7 +101,6 @@ elseif(MSVC)
 
     # Security flags for MSVC
     target_compile_definitions(ctm_compiler_options INTERFACE
-        _ITERATOR_DEBUG_LEVEL=0
         NOMINMAX
         WIN32_LEAN_AND_MEAN
         _CRT_SECURE_NO_WARNINGS  # Drogon uses some legacy C APIs

@@ -45,7 +45,7 @@ namespace cfg {
 // Global atomic flag — set by SIGTERM/SIGINT, checked by Drogon's loop.
 static std::atomic<bool> g_shutdown_requested{false};
 
-static void handleSignal(int signum) noexcept {
+static void handleSignal(int /*signum*/) noexcept {
     // async-signal-safe: only write to atomic and call async-safe functions
     g_shutdown_requested.store(true, std::memory_order_relaxed);
     // Gracefully terminate Drogon's event loop
@@ -53,6 +53,7 @@ static void handleSignal(int signum) noexcept {
 }
 
 static void registerSignalHandlers() {
+#ifndef _WIN32
     struct sigaction sa{};
     sa.sa_handler = handleSignal;
     ::sigemptyset(&sa.sa_mask);
@@ -62,6 +63,10 @@ static void registerSignalHandlers() {
     ::sigaction(SIGHUP,  &sa, nullptr);   // Terminal hangup / reload
     // Ignore SIGPIPE — raised by broken WebSocket/HTTP connections
     ::signal(SIGPIPE, SIG_IGN);
+#else
+    ::signal(SIGTERM, handleSignal);
+    ::signal(SIGINT, handleSignal);
+#endif
 }
 
 // ── Startup banner ────────────────────────────────────────────────────────
@@ -69,8 +74,8 @@ static void printBanner() {
     std::cout
         << "\n"
         << "  ┌────────────────────────────────────────────────────┐\n"
-        << "  │  CTM-1 Edge Core v" CTM1_VERSION_MAJOR "." CTM1_VERSION_MINOR "." CTM1_VERSION_PATCH
-        << "  [" CTM1_BUILD_TYPE "]" << "                    │\n"
+        << "  │  CTM-1 Edge Core v" << CTM1_VERSION_MAJOR << "." << CTM1_VERSION_MINOR << "." << CTM1_VERSION_PATCH
+        << "  [" << CTM1_BUILD_TYPE << "]" << "                    │\n"
         << "  │  Industrial Edge Gateway — HTTP / WebSocket / Modbus  │\n"
         << "  ├────────────────────────────────────────────────────┤\n"
         << "  │  HTTP  : http://"  << cfg::HTTP_HOST << ":" << cfg::HTTP_PORT  << "/api/v1       │\n"
@@ -95,7 +100,7 @@ static void registerHealthEndpoint() {
             Json::Value body;
             body["status"]           = "ok";
             body["service"]          = "ctm1-edge-core";
-            body["version"]          = CTM1_VERSION_MAJOR "." CTM1_VERSION_MINOR "." CTM1_VERSION_PATCH;
+            body["version"]          = std::to_string(CTM1_VERSION_MAJOR) + "." + std::to_string(CTM1_VERSION_MINOR) + "." + std::to_string(CTM1_VERSION_PATCH);
             body["modbus_enabled"]   = (CTM_MODBUS_ENABLED != 0);
             body["modbus_running"]   = ctm::modbus::ModbusServer::getInstance().isRunning();
 
@@ -134,7 +139,9 @@ static void registerCors() {
             "/api/v1/health",
             "/api/v1/alarms",
             "/api/v1/alarms/{id}/ack",
-            "/api/v1/alarms/{id}/clear"
+            "/api/v1/alarms/{id}/clear",
+            "/api/v1/context",
+            "/api/v1/ai/resolve"
         }) {
         drogon::app().registerHandler(path, preflight, {drogon::Options});
     }
@@ -163,6 +170,24 @@ static void registerControllers() {
         {drogon::Post}
     );
 
+    drogon::app().registerHandler(
+        "/api/v1/context",
+        [restCtrl](const drogon::HttpRequestPtr& req,
+                   std::function<void(const drogon::HttpResponsePtr&)>&& cb) {
+            restCtrl->getContext(req, std::move(cb));
+        },
+        {drogon::Get}
+    );
+
+    drogon::app().registerHandler(
+        "/api/v1/ai/resolve",
+        [restCtrl](const drogon::HttpRequestPtr& req,
+                   std::function<void(const drogon::HttpResponsePtr&)>&& cb) {
+            restCtrl->resolveAIIntent(req, std::move(cb));
+        },
+        {drogon::Post}
+    );
+
     // ── Topology — publish & list assets ──────────────────────────────
     auto topoCtrl = std::make_shared<ctm::api::TopologyCtrl>();
 
@@ -187,6 +212,8 @@ static void registerControllers() {
 
 // ── main ──────────────────────────────────────────────────────────────────
 int main(int /*argc*/, char* /*argv*/[]) {
+    std::cout << "[DEBUG] Entering main()\n";
+    std::cout.flush();
 
     // 1. OS signals — must be registered before any threads are spawned
     registerSignalHandlers();
@@ -210,7 +237,7 @@ int main(int /*argc*/, char* /*argv*/[]) {
     // 4. Drogon HTTP + WebSocket server
     drogon::app().addListener(cfg::HTTP_HOST, cfg::HTTP_PORT);
     drogon::app().setThreadNum(4);   // Drogon I/O thread pool size
-    drogon::app().disableSigsegfHandler();  // We handle our own signals
+    // We handle our own signals
 
     // 5. Register middleware & routes
     registerCors();

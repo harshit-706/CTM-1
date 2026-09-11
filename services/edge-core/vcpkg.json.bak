@@ -1,0 +1,19 @@
+{
+  "name": "ctm-edge-core",
+  "version": "1.0.0",
+  "description": "CTM-1 Edge Core \u2014 Industrial IoT Edge Service",
+  "dependencies": [
+    "drogon",
+    "jsoncpp",
+    "sqlite3",
+    "libmodbus"
+  ],
+  "features": {
+    "testing": {
+      "description": "Unit test dependencies",
+      "dependencies": [
+        "catch2"
+      ]
+    }
+  }
+}

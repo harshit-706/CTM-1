@@ -19,12 +19,16 @@ public:
     std::optional<domain::TelemetryEvent> getLatestTelemetry(const std::string& asset_id, const std::string& tag_id) const;
     std::vector<domain::TelemetryEvent> getAllLatestTelemetry() const;
 
+    void incrementContextVersion() { context_version_++; }
+    uint64_t getContextVersion() const { return context_version_.load(); }
+
 private:
     LiveStateStore() = default;
     
     mutable std::shared_mutex mutex_;
     // Map: asset_id -> (tag_id -> TelemetryEvent)
     std::unordered_map<std::string, std::unordered_map<std::string, domain::TelemetryEvent>> store_;
+    std::atomic<uint64_t> context_version_{0};
 };
 
 } // namespace ingestion

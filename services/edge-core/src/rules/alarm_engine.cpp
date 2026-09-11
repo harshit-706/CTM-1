@@ -1,5 +1,6 @@
 #include "alarm_engine.h"
 #include "../api/websocket_ctrl.h"
+#include "../ingestion/live_state_store.h"
 #include <iostream>
 #include <json/json.h>
 
@@ -51,6 +52,8 @@ void AlarmEngine::createOrUpdateAlarm(const std::string& asset_id, const std::st
         
         Json::FastWriter writer;
         api::WebSocketCtrl::broadcast(writer.write(wsMsg));
+        
+        ctm::ingestion::LiveStateStore::getInstance().incrementContextVersion();
     }
 }
 
@@ -68,6 +71,8 @@ bool AlarmEngine::acknowledgeAlarm(const std::string& id, const std::string& use
         wsMsg["payload"]["ack_user"] = user;
         Json::FastWriter writer;
         api::WebSocketCtrl::broadcast(writer.write(wsMsg));
+        
+        ctm::ingestion::LiveStateStore::getInstance().incrementContextVersion();
         return true;
     }
     return false;
@@ -87,6 +92,8 @@ bool AlarmEngine::clearAlarm(const std::string& id, const std::string& user) {
         api::WebSocketCtrl::broadcast(writer.write(wsMsg));
         
         active_alarms_.erase(it);
+        
+        ctm::ingestion::LiveStateStore::getInstance().incrementContextVersion();
         return true;
     }
     return false;

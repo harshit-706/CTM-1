@@ -65,11 +65,12 @@ target_link_libraries(ctm_rules
             ctm::ingestion
     PRIVATE ctm::compiler_options
             ctm::sanitizer_options
+            Drogon::Drogon
             Threads::Threads
 )
 
 # ── Module: api ────────────────────────────────────────────────────────────
-add_library(ctm_api STATIC
+add_library(ctm_api OBJECT
     src/api/rest_ctrl.cpp
     src/api/topology_ctrl.cpp
     src/api/websocket_ctrl.cpp

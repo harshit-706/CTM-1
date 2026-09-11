@@ -1,21 +1,30 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 
-const API_KEY = process.env.ASTRA_GPT_API_KEY || "xpl_277689f3fe27ba3a58da6d11d09acb6c270e7d7b";
-const ENDPOINT = process.env.ASTRA_MODEL_ENDPOINT || "https://api.x.ai/v1/chat/completions";
+const API_KEY = process.env.GROQ_API_KEY;
+const ENDPOINT = process.env.GROQ_ENDPOINT || "https://api.groq.com/openai/v1/chat/completions";
 
-// CTM1 AI — tight, industrial-grade system prompt
 const SYSTEM_PROMPT = `You are CTM1 — an embedded industrial AI for the CTM-1 edge monitoring platform.
-You receive real-time asset telemetry and operator questions. Respond concisely and precisely.
+You receive real-time asset telemetry and operator questions. Respond ONLY with a valid JSON object.
+Do not output raw text outside the JSON object.
+
+JSON SCHEMA:
+{
+  "message": "Conversational reply. Provide context, explain alarms, say hello, or output the topology_json markdown block here.",
+  "action": {
+    "intent": "show | show_overview | none",
+    "target": "asset_id or asset_name (e.g., 'breaker-1', 'pump-1', or empty)",
+    "properties": ["temp", "vibration", "current", "speed", "state", "status", "health"]
+  }
+}
 
 RULES:
-- Max 5 bullet points or 3 short paragraphs. No filler text.
-- Always reference the actual asset ID and tag values from context when provided.
-- For alarms: state Root Cause, Severity (LOW/MED/HIGH/CRIT), and 1-3 immediate actions.
-- For topology requests: output ONLY the topology_json block + 2-line summary.
-- Never repeat the question back. No introductory fluff.
+- If the user asks a conversational question, answer it in the "message" field.
+- If the user asks for asset data, set "action.intent" to "show" and "action.target" to the asset ID. If asking for a general status, set "action.intent" to "show_overview".
+- If NO widget needs to be rendered, set "action.intent" to "none".
+- Map requested properties to "action.properties". Always include ["state", "status", "health"] for general status.
 
-TOPOLOGY FORMAT (use ONLY when user asks to build/create/design a plant):
+TOPOLOGY FORMAT (use ONLY when user asks to build/create/design a plant. Put this INSIDE the "message" field):
 \`\`\`topology_json
 {
   "nodes": [
@@ -26,24 +35,34 @@ TOPOLOGY FORMAT (use ONLY when user asks to build/create/design a plant):
   ]
 }
 \`\`\`
-
 Valid node types: plc, pac, remote_io, edge_gateway, breaker, vfd, soft_starter, energy_meter, motor, pump, compressor, fan, temp_sensor, pressure_sensor, flow_sensor, vibration_sensor, hmi, scada.
-Valid edges: plc→vfd/soft_starter/remote_io/scada, breaker→vfd/motor, vfd→motor, motor→pump/compressor/fan, pump→pressure_sensor/flow_sensor/vibration_sensor, remote_io→sensors.`;
+Valid edges: plc->vfd, breaker->motor, etc.`;
 
 export const POST: RequestHandler = async ({ request }) => {
 	try {
 		const body = await request.json();
 		const userPrompt = body.prompt || "Give plant status summary.";
-		// Attach live telemetry snapshot if provided by frontend
-		const telemetryCtx: string = body.telemetry
-			? `\n\n[LIVE TELEMETRY]\n${JSON.stringify(body.telemetry, null, 2)}`
-			: '';
-		const fullPrompt = userPrompt + telemetryCtx;
-		const pLower = userPrompt.toLowerCase();
-		const isTopologyRequest = pLower.includes("topology") || pLower.includes("build") ||
-			pLower.includes("create") || pLower.includes("design") || pLower.includes("layout");
 
-		// Call CTM1 AI (Grok-2 via xAI)
+		// 1. Fetch current machine context from C++ Edge Core
+		let contextData: any = null;
+		try {
+			const ctxRes = await fetch('http://127.0.0.1:8080/api/v1/context');
+			if (ctxRes.ok) {
+				contextData = await ctxRes.json();
+			}
+		} catch (e) {
+			console.warn('[CTM1] Failed to fetch context from Edge Core:', e);
+			return json({ success: false, error: "Edge Core unavailable for context retrieval." }, { status: 502 });
+		}
+
+		// 2. Prepare context for Groq
+		const contextStr = contextData ? JSON.stringify(contextData, null, 2) : "No context available.";
+		const fullPrompt = `OPERATOR INTENT: ${userPrompt}\n\nCURRENT CONTEXT:\n${contextStr}`;
+
+		// 3. Call Groq LLM to interpret intent into a BOUNDED JSON TASK
+		let intentTask: any = null;
+		let aiMessage: string = "Processing completed.";
+
 		try {
 			const res = await fetch(ENDPOINT, {
 				method: 'POST',
@@ -52,82 +71,70 @@ export const POST: RequestHandler = async ({ request }) => {
 					'Authorization': `Bearer ${API_KEY}`
 				},
 				body: JSON.stringify({
-					model: 'grok-2-latest',
+					model: 'qwen/qwen3.8-27b',
 					messages: [
 						{ role: 'system', content: SYSTEM_PROMPT },
 						{ role: 'user', content: fullPrompt }
 					],
-					temperature: 0.2,
-					max_tokens: 450
+					temperature: 0.1,
+					max_tokens: 1500,
+					response_format: { type: "json_object" }
 				})
 			});
 
 			if (res.ok) {
 				const data = await res.json();
 				const answer = data.choices?.[0]?.message?.content;
-				if (answer) {
-					return json({ success: true, model: 'grok-2-latest', content: answer });
+				if (answer && (answer.startsWith('{') || answer.startsWith('['))) {
+					const parsed = JSON.parse(answer);
+					aiMessage = parsed.message || "Screen generated.";
+					intentTask = parsed.action;
 				}
+			} else {
+			    const errText = await res.text();
+			    console.error("Groq error:", errText);
+			    return json({ success: false, error: "AI interpretation failed (Groq Error)" }, { status: 502 });
 			}
 		} catch (e) {
-			console.warn('[CTM1] Online model unavailable, using local fallback:', e);
+			console.warn('[CTM1] LLM unavailable:', e);
+			return json({ success: false, error: "AI interpretation failed (Network Error)" }, { status: 502 });
 		}
 
-		// Local fallback — concise, CTM1-branded
-		let content = "";
-		if (isTopologyRequest) {
-			content = `**CTM1:** Standard PLC→VFD→Motor→Pump layout generated.
+        if (!intentTask) {
+            return json({ success: false, error: "AI failed to produce a valid action task." }, { status: 500 });
+        }
 
-\`\`\`topology_json
-{
-  "nodes": [
-    { "id": "plc-1", "type": "plc", "label": "Siemens S7-1500", "manufacturer": "Siemens", "model": "S7-1500", "x": 80, "y": 200 },
-    { "id": "breaker-1", "type": "breaker", "label": "Main Circuit Breaker", "manufacturer": "Schneider Electric", "model": "EasyPact EZC", "x": 80, "y": 80 },
-    { "id": "vfd-1", "type": "vfd", "label": "Danfoss VFD FC 302", "manufacturer": "Danfoss", "model": "VLT AutomationDrive FC 302", "x": 320, "y": 180 },
-    { "id": "motor-1", "type": "motor", "label": "WEG W22 Motor", "manufacturer": "WEG", "model": "W22 Premium Efficiency", "x": 560, "y": 180 },
-    { "id": "pump-1", "type": "pump", "label": "Grundfos CR Pump", "manufacturer": "Grundfos", "model": "CR/CRI/CRN", "x": 800, "y": 180 },
-    { "id": "vibration_sensor-1", "type": "vibration_sensor", "label": "Vibration Sensor", "x": 800, "y": 330 },
-    { "id": "pressure_sensor-1", "type": "pressure_sensor", "label": "Discharge Pressure", "x": 1020, "y": 180 }
-  ],
-  "edges": [
-    { "source": "breaker-1", "target": "vfd-1" },
-    { "source": "plc-1", "target": "vfd-1" },
-    { "source": "vfd-1", "target": "motor-1" },
-    { "source": "motor-1", "target": "pump-1" },
-    { "source": "motor-1", "target": "vibration_sensor-1" },
-    { "source": "pump-1", "target": "pressure_sensor-1" }
-  ]
-}
-\`\`\``;
-		} else if (pLower.includes("vibration") || pLower.includes("bearing")) {
-			const assetRef = body.telemetry ? Object.keys(body.telemetry)[0] : 'target asset';
-			content = `**CTM1 Diagnosis — ${assetRef}**
-- **Root Cause:** Bearing outer race wear (stage 2). Vibration +18% above 4.2 mm/s RMS baseline.
-- **Severity:** HIGH
-- **Actions:** ① Inspect DE bearing lubrication. ② Reduce speed 10% via VFD. ③ Schedule bearing replacement next maintenance window.`;
-		} else if (pLower.includes("temperature") || pLower.includes("overload") || pLower.includes("heat")) {
-			content = `**CTM1 Diagnosis**
-- **Root Cause:** Thermal stator overload. Cooling airway likely restricted.
-- **Severity:** CRITICAL
-- **Actions:** ① Check cooling fan guard for blockage. ② Verify ambient HVAC. ③ Transfer load if winding temp >95°C.`;
-		} else if (pLower.includes("energy") || pLower.includes("power") || pLower.includes("efficiency")) {
-			content = `**CTM1 Energy Report**
-- Shift compressor cycling to off-peak hours → est. **4.2% kWh saving**.
-- Check power factor on active VFDs (target >0.92).
-- Review motor load% — assets running <40% load are candidates for speed reduction.`;
-		} else if (pLower.includes("pump") || pLower.includes("pressure") || pLower.includes("flow")) {
-			content = `**CTM1 Pump Diagnosis**
-- Check discharge pressure vs suction — pressure drop >15% indicates cavitation risk.
-- Verify flow setpoint vs actual. Deviation >10% suggests wear ring erosion.
-- **Action:** Inspect mechanical seal and impeller at next scheduled stop.`;
-		} else {
-			const assetCount = body.telemetry ? Object.keys(body.telemetry).length : 0;
-			content = `**CTM1 Plant Status**
-${assetCount > 0 ? `- Monitoring **${assetCount} assets** — all within nominal bands.` : '- No live telemetry context attached.'}
-- Try: _"Diagnose P-104 vibration"_, _"Energy efficiency report"_, or _"Build water treatment topology"_`;
+		// 4. Send Bounded JSON Task to C++ Edge Core for Deterministic Validation (if applicable)
+		let validatedHmi: any = null;
+		if (intentTask.intent !== "none") {
+			try {
+				const validateRes = await fetch('http://127.0.0.1:8080/api/v1/ai/resolve', {
+				    method: 'POST',
+				    headers: { 'Content-Type': 'application/json' },
+				    body: JSON.stringify(intentTask)
+				});
+				const validateData = await validateRes.json();
+				
+				if (validateData.success) {
+				    validatedHmi = validateData.hmi_json;
+				} else {
+				    return json({ success: false, error: validateData.error || "C++ Validation failed." });
+				}
+			} catch (e) {
+				console.warn('[CTM1] C++ Validation unavailable:', e);
+				return json({ success: false, error: "Validation layer unavailable." }, { status: 502 });
+			}
 		}
 
-		return json({ success: true, model: 'ctm1-local', content });
+        // Return the dynamically generated and C++ validated HMI JSON
+		return json({ 
+		    success: true, 
+		    model: 'qwen/qwen3.8-27b', 
+		    content: aiMessage, 
+		    hmi_json: validatedHmi,
+		    context_version: contextData?.contextVersion,
+		    bounded_task: intentTask
+		});
 	} catch (err: any) {
 		return json({ success: false, error: err.message }, { status: 500 });
 	}
