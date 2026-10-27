@@ -12,7 +12,16 @@ This prototype consists of three main components running locally:
 2. **Edge Core (`services/edge-core`)**: A C++20 backend. It leverages the Drogon framework to expose a REST API (for telemetry ingestion) and a WebSocket endpoint (for live UI updates). It maintains the canonical live-state of the plant and includes a deterministic rule engine for alarms.
 3. **Simulator (`simulator`)**: A Python-based script (`main.py`) that acts as the virtual plant. It simulates process parameters (speed, current, pressure, flow, vibration) for multiple assets and publishes this telemetry to the Edge Core at a configurable tick rate.
 
-### What is real vs simulated
+### Key Contributions
+
+### Frontend / HMI Development
+
+- Contributed to project ideation and MVP planning, focusing on the frontend and HMI experience.
+- Contributed to frontend implementation, including HMI panel features and supporting core tools.
+- Contributed to documentation related to the frontend and HMI components.
+- Helped shape the frontend portion of the CTM-1 MVP.
+
+## What is real vs simulated
 
 **Real Prototype Functionality:**
 - The SvelteKit Web App is fully functional as a frontend shell.
